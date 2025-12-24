@@ -13,3 +13,4 @@ services:
 
 volumes:
   pgdata:
+    name: support-triage-pgdata

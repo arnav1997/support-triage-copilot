@@ -19,8 +19,16 @@ public class TicketService {
     }
 
     @Transactional(readOnly = true)
-    public List<Ticket> list() {
-        return repo.findAll(Sort.by(Sort.Direction.DESC, "createdAt"));
+    public List<Ticket> list(TicketStatus status, String q) {
+        String query = (q == null) ? null : q.trim();
+
+        // If no filters, keep your existing behavior (createdAt desc)
+        if (status == null && (query == null || query.isEmpty())) {
+            return repo.findAll(Sort.by(Sort.Direction.DESC, "createdAt"));
+        }
+
+        // Otherwise use the search query (updatedAt desc)
+        return repo.search(status, query);
     }
 
     @Transactional(readOnly = true)

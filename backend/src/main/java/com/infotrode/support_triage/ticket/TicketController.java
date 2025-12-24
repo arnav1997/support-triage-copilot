@@ -20,8 +20,28 @@ public class TicketController {
     }
 
     @GetMapping
-    public List<TicketResponse> list() {
-        return service.list().stream().map(TicketResponse::from).toList();
+    public List<TicketResponse> list(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String q
+    ) {
+        TicketStatus parsedStatus = parseStatus(status);
+        return service.list(parsedStatus, q).stream().map(TicketResponse::from).toList();
+    }
+
+    private TicketStatus parseStatus(String status) {
+        if (status == null) return null;
+
+        String s = status.trim();
+        if (s.isEmpty()) return null;
+
+        try {
+            return TicketStatus.valueOf(s.toUpperCase());
+        } catch (IllegalArgumentException ex) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.BAD_REQUEST,
+                    "Invalid status: " + status + ". Allowed: " + java.util.Arrays.toString(TicketStatus.values())
+            );
+        }
     }
 
     @PostMapping

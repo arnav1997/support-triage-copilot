@@ -15,6 +15,9 @@ export default function Inbox() {
   const [tickets, setTickets] = useState<Ticket[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<string>("");
+  const [q, setQ] = useState("");
+
 
   // simple create form state
   const [subject, setSubject] = useState("");
@@ -34,7 +37,11 @@ export default function Inbox() {
     setError(null);
     setLoading(true);
     try {
-      const data = await api.listTickets();
+      const data = await api.listTickets({
+        status: filterStatus.trim() ? filterStatus.trim() : undefined,
+        q: q.trim() ? q.trim() : undefined,
+      });
+
       setTickets(data);
     } catch (e: any) {
       setError(e?.message ?? "Failed to load tickets");
@@ -79,6 +86,35 @@ export default function Inbox() {
     <div style={{ display: "grid", gridTemplateColumns: "1fr 420px", gap: 16 }}>
       <section>
         <h3 style={{ marginTop: 0 }}>Inbox</h3>
+
+          <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12 }}>
+          <label style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            Status
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              style={{ padding: 8 }}
+            >
+              <option value="">All</option>
+              <option value="OPEN">OPEN</option>
+              <option value="IN_PROGRESS">IN_PROGRESS</option>
+              <option value="WAITING_ON_CUSTOMER">WAITING_ON_CUSTOMER</option>
+              <option value="RESOLVED">RESOLVED</option>
+              <option value="CLOSED">CLOSED</option>
+            </select>
+          </label>
+
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search subject/body/email/category..."
+            style={{ flex: 1, padding: 8 }}
+          />
+
+          <button onClick={refresh} style={{ padding: "8px 12px", cursor: "pointer" }}>
+            Search
+          </button>
+        </div>
 
         {loading && <p>Loading...</p>}
         {error && (

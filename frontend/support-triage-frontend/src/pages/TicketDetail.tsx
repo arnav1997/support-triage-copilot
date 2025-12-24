@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import type { Ticket } from "../api/client";
+import type { Ticket, TicketNote } from "../api/client";
 
 
 export default function TicketDetail() {
@@ -18,6 +18,10 @@ export default function TicketDetail() {
   const [category, setCategory] = useState("");
   const [tags, setTags] = useState("");
 
+  const [notes, setNotes] = useState<TicketNote[]>([]);
+  const [noteBody, setNoteBody] = useState("");
+  const [noteSaving, setNoteSaving] = useState(false);
+
   async function load() {
     setError(null);
     try {
@@ -27,6 +31,9 @@ export default function TicketDetail() {
       setPriority(t.priority);
       setCategory(t.category ?? "");
       setTags((t.tags ?? []).join(", "));
+
+      const ns = await api.listNotes(ticketId);
+      setNotes(ns);
     } catch (e: any) {
       setError(e?.message ?? "Failed to load ticket");
     }
@@ -58,6 +65,23 @@ export default function TicketDetail() {
     }
   }
 
+  async function addNote() {
+    const bodyTrimmed = noteBody.trim();
+    if (!bodyTrimmed) return;
+
+    setNoteSaving(true);
+    setError(null);
+    try {
+      const created = await api.createNote(ticketId, { type: "note", body: bodyTrimmed });
+      setNotes((prev) => [created, ...prev]);
+      setNoteBody("");
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to add note");
+    } finally {
+      setNoteSaving(false);
+    }
+  }
+
   if (!Number.isFinite(ticketId)) return <p>Invalid ticket id.</p>;
 
   return (
@@ -76,104 +100,153 @@ export default function TicketDetail() {
       {!ticket ? (
         <p style={{ marginTop: 12 }}>Loading...</p>
       ) : (
-        <div style={{ marginTop: 12, display: "grid", gap: 12 }}>
-          <div
-            style={{
-              border: "1px solid #ddd",
-              padding: 12,
-              borderRadius: 8,
-            }}
-          >
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{ticket.subject}</div>
-            <div style={{ marginTop: 6, opacity: 0.85 }}>
-              From: {ticket.requesterEmail}
+        <div
+          style={{
+            marginTop: 12,
+            display: "grid",
+            gridTemplateColumns: "1fr 380px",
+            gap: 12,
+            alignItems: "start",
+          }}
+        >
+          {/* LEFT */}
+          <div style={{ display: "grid", gap: 12 }}>
+            <div style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
+              <div style={{ fontSize: 18, fontWeight: 700 }}>{ticket.subject}</div>
+              <div style={{ marginTop: 6, opacity: 0.85 }}>
+                From: {ticket.requesterEmail}
+              </div>
+            </div>
+
+            <div
+              style={{
+                border: "1px solid #ddd",
+                padding: 12,
+                borderRadius: 8,
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 12,
+              }}
+            >
+              {/* (your existing editable fields remain unchanged here) */}
+              {/* Status/Priority/Category/Tags + Save button */}
+              {/* ... keep your current controls exactly ... */}
+              <label style={{ display: "block" }}>
+                Status
+                <select
+                  value={status}
+                  onChange={(e) => setStatus(e.target.value as any)}
+                  style={{ width: "100%", padding: 8, marginTop: 6 }}
+                >
+                  <option value="OPEN">OPEN</option>
+                  <option value="IN_PROGRESS">IN_PROGRESS</option>
+                  <option value="WAITING_ON_CUSTOMER">WAITING_ON_CUSTOMER</option>
+                  <option value="RESOLVED">RESOLVED</option>
+                  <option value="CLOSED">CLOSED</option>
+                </select>
+              </label>
+
+              <label style={{ display: "block" }}>
+                Priority
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value as any)}
+                  style={{ width: "100%", padding: 8, marginTop: 6 }}
+                >
+                  <option value="LOW">LOW</option>
+                  <option value="MEDIUM">MEDIUM</option>
+                  <option value="HIGH">HIGH</option>
+                  <option value="URGENT">URGENT</option>
+                </select>
+              </label>
+
+              <label style={{ display: "block" }}>
+                Category
+                <input
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  style={{ width: "100%", padding: 8, marginTop: 6 }}
+                  placeholder="AUTH / BILLING / BUG / ..."
+                />
+              </label>
+
+              <label style={{ display: "block" }}>
+                Tags (comma-separated)
+                <input
+                  value={tags}
+                  onChange={(e) => setTags(e.target.value)}
+                  style={{ width: "100%", padding: 8, marginTop: 6 }}
+                  placeholder="login, sev2"
+                />
+              </label>
+
+              <button
+                onClick={save}
+                disabled={saving}
+                style={{
+                  gridColumn: "1 / -1",
+                  padding: 10,
+                  cursor: saving ? "not-allowed" : "pointer",
+                }}
+              >
+                {saving ? "Saving..." : "Save changes"}
+              </button>
+            </div>
+
+            <div style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
+              <h4 style={{ marginTop: 0 }}>Body</h4>
+              <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>{ticket.body}</pre>
             </div>
           </div>
 
-          <div
-            style={{
-              border: "1px solid #ddd",
-              padding: 12,
-              borderRadius: 8,
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 12,
-            }}
-          >
-            <label style={{ display: "block" }}>
-              Status
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as any)}
-                style={{ width: "100%", padding: 8, marginTop: 6 }}
-              >
-                <option value="OPEN">OPEN</option>
-                <option value="IN_PROGRESS">IN_PROGRESS</option>
-                <option value="WAITING_ON_CUSTOMER">WAITING_ON_CUSTOMER</option>
-                <option value="RESOLVED">RESOLVED</option>
-                <option value="CLOSED">CLOSED</option>
-              </select>
-            </label>
+          {/* RIGHT: ACTIVITY */}
+          <aside style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
+            <h4 style={{ marginTop: 0 }}>Activity</h4>
 
-            <label style={{ display: "block" }}>
-              Priority
-              <select
-                value={priority}
-                onChange={(e) => setPriority(e.target.value as any)}
-                style={{ width: "100%", padding: 8, marginTop: 6 }}
-              >
-                <option value="LOW">LOW</option>
-                <option value="MEDIUM">MEDIUM</option>
-                <option value="HIGH">HIGH</option>
-                <option value="URGENT">URGENT</option>
-              </select>
-            </label>
+            <div style={{ marginBottom: 12, padding: 10, border: "1px solid #eee", borderRadius: 8 }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>AI runs summary</div>
+              <div style={{ fontSize: 13, opacity: 0.8 }}>
+                No AI runs yet.
+              </div>
+            </div>
 
-            <label style={{ display: "block" }}>
-              Category
-              <input
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                style={{ width: "100%", padding: 8, marginTop: 6 }}
-                placeholder="AUTH / BILLING / BUG / ..."
-              />
-            </label>
+            <div style={{ marginBottom: 10, fontWeight: 600 }}>Notes</div>
 
-            <label style={{ display: "block" }}>
-              Tags (comma-separated)
-              <input
-                value={tags}
-                onChange={(e) => setTags(e.target.value)}
-                style={{ width: "100%", padding: 8, marginTop: 6 }}
-                placeholder="login, sev2"
-              />
-            </label>
+            <textarea
+              value={noteBody}
+              onChange={(e) => setNoteBody(e.target.value)}
+              placeholder="Add a note..."
+              style={{ width: "100%", padding: 8, height: 90 }}
+            />
 
             <button
-              onClick={save}
-              disabled={saving}
+              onClick={addNote}
+              disabled={noteSaving || !noteBody.trim()}
               style={{
-                gridColumn: "1 / -1",
+                width: "100%",
                 padding: 10,
-                cursor: saving ? "not-allowed" : "pointer",
+                marginTop: 8,
+                cursor: noteSaving ? "not-allowed" : "pointer",
               }}
             >
-              {saving ? "Saving..." : "Save changes"}
+              {noteSaving ? "Adding..." : "Add note"}
             </button>
-          </div>
 
-          <div
-            style={{
-              border: "1px solid #ddd",
-              padding: 12,
-              borderRadius: 8,
-            }}
-          >
-            <h4 style={{ marginTop: 0 }}>Body</h4>
-            <pre style={{ whiteSpace: "pre-wrap", margin: 0 }}>
-              {ticket.body}
-            </pre>
-          </div>
+            <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
+              {notes.length === 0 ? (
+                <div style={{ fontSize: 13, opacity: 0.8 }}>No notes yet.</div>
+              ) : (
+                notes.map((n) => (
+                  <div key={n.id} style={{ border: "1px solid #eee", padding: 10, borderRadius: 8 }}>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>
+                      {n.type} · {new Date(n.createdAt).toLocaleString()}
+                    </div>
+                    <div style={{ marginTop: 6, whiteSpace: "pre-wrap" }}>{n.body}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </aside>
         </div>
       )}
     </div>

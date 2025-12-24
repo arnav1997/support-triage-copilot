@@ -34,6 +34,21 @@ export type UpdateTicketRequest = Partial<
   Pick<Ticket, "subject" | "body" | "status" | "priority" | "category" | "tags">
 >;
 
+export type TicketNoteType = "note" | "system" | "ai" | string;
+
+export type TicketNote = {
+  id: number;
+  ticketId: number;
+  type: TicketNoteType;
+  body: string;
+  createdAt: string;
+};
+
+export type CreateNoteRequest = {
+  type?: TicketNoteType;
+  body: string;
+};
+
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -51,13 +66,27 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  listTickets: () => http<Ticket[]>("/api/tickets"),
+  listTickets: (params?: { status?: string; q?: string }) => {
+    const usp = new URLSearchParams();
+    if (params?.status) usp.set("status", params.status);
+    if (params?.q) usp.set("q", params.q);
+    const qs = usp.toString();
+    return http<Ticket[]>(qs ? `/api/tickets?${qs}` : "/api/tickets");
+  },
   getTicket: (id: number) => http<Ticket>(`/api/tickets/${id}`),
   createTicket: (req: CreateTicketRequest) =>
     http<Ticket>("/api/tickets", { method: "POST", body: JSON.stringify(req) }),
   patchTicket: (id: number, req: UpdateTicketRequest) =>
     http<Ticket>(`/api/tickets/${id}`, {
       method: "PATCH",
+      body: JSON.stringify(req),
+    }),
+  listNotes: (ticketId: number) =>
+    http<TicketNote[]>(`/api/tickets/${ticketId}/notes`),
+
+  createNote: (ticketId: number, req: CreateNoteRequest) =>
+    http<TicketNote>(`/api/tickets/${ticketId}/notes`, {
+      method: "POST",
       body: JSON.stringify(req),
     }),
 };
