@@ -21,3 +21,8 @@ management:
     web:
       exposure:
         include: health,info
+ai:
+  ollama:
+    baseUrl: ${OLLAMA_BASE_URL:http://localhost:11434}
+    model: ${OLLAMA_MODEL:llama3.2}
+    timeoutSeconds: ${OLLAMA_TIMEOUT_SECONDS:60}

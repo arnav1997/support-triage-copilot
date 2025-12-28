@@ -44,7 +44,10 @@ public class TicketService {
         t.setBody(req.getBody());
         t.setStatus(req.getStatus());     // can be null; entity defaults handle it
         t.setPriority(req.getPriority()); // can be null
-        t.setCategory(req.getCategory());
+
+        String cat = req.getCategory();
+        t.setCategory((cat == null || cat.trim().isEmpty()) ? null : cat.trim());
+
         t.setTags(req.getTags());
         return repo.save(t);
     }
@@ -56,7 +59,12 @@ public class TicketService {
         if (req.getSubject() != null) t.setSubject(req.getSubject());
         if (req.getStatus() != null) t.setStatus(req.getStatus());
         if (req.getPriority() != null) t.setPriority(req.getPriority());
-        if (req.getCategory() != null) t.setCategory(req.getCategory());
+
+        if (req.getCategory() != null) {
+            String cat = req.getCategory();
+            t.setCategory(cat.trim().isEmpty() ? null : cat.trim());
+        }
+
         if (req.getTags() != null) t.setTags(req.getTags());
         if (req.getBody() != null) t.setBody(req.getBody());
 

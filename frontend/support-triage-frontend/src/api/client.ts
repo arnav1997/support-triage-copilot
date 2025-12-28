@@ -49,6 +49,23 @@ export type CreateNoteRequest = {
   body: string;
 };
 
+// --- AI types ---
+export type AiTriageEntities = {
+  requesterEmail: string;
+  orderId: string;
+  product: string;
+  errorCode: string;
+};
+
+export type AiTriageSuggestion = {
+  category: string;
+  priority: TicketPriority;
+  tags: string[];
+  rationale: string;
+  entities: AiTriageEntities;
+  aiRunId: number;
+};
+
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -88,5 +105,11 @@ export const api = {
     http<TicketNote>(`/api/tickets/${ticketId}/notes`, {
       method: "POST",
       body: JSON.stringify(req),
+    }),
+
+  triageTicket: (ticketId: number) =>
+    http<AiTriageSuggestion>("/api/ai/triage", {
+      method: "POST",
+      body: JSON.stringify({ ticketId }),
     }),
 };

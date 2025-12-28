@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import type { Ticket, TicketNote } from "../api/client";
-
+import type { Ticket, TicketNote, AiTriageSuggestion } from "../api/client";
 
 export default function TicketDetail() {
   const { id } = useParams();
@@ -21,6 +20,12 @@ export default function TicketDetail() {
   const [notes, setNotes] = useState<TicketNote[]>([]);
   const [noteBody, setNoteBody] = useState("");
   const [noteSaving, setNoteSaving] = useState(false);
+
+  // --- AI triage state ---
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<AiTriageSuggestion | null>(null);
+  const [aiApplying, setAiApplying] = useState(false);
 
   async function load() {
     setError(null);
@@ -82,6 +87,48 @@ export default function TicketDetail() {
     }
   }
 
+  async function suggestTriage() {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const s = await api.triageTicket(ticketId);
+      setAiSuggestion(s);
+    } catch (e: any) {
+      setAiError(e?.message ?? "AI triage failed");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  async function applySuggestion(part: "all" | "category" | "priority" | "tags") {
+    if (!aiSuggestion) return;
+
+    setAiApplying(true);
+    setError(null);
+
+    const patch: any = {};
+    if (part === "all" || part === "category") patch.category = aiSuggestion.category;
+    if (part === "all" || part === "priority") patch.priority = aiSuggestion.priority;
+    if (part === "all" || part === "tags") patch.tags = aiSuggestion.tags;
+
+    try {
+      const updated = await api.patchTicket(ticketId, patch);
+
+      // update main ticket + form state
+      setTicket(updated);
+      setStatus(updated.status);
+      setPriority(updated.priority);
+      setCategory(updated.category ?? "");
+      setTags((updated.tags ?? []).join(", "));
+
+      // optional: keep showing suggestion after apply
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to apply AI suggestion");
+    } finally {
+      setAiApplying(false);
+    }
+  }
+
   if (!Number.isFinite(ticketId)) return <p>Invalid ticket id.</p>;
 
   return (
@@ -128,9 +175,6 @@ export default function TicketDetail() {
                 gap: 12,
               }}
             >
-              {/* (your existing editable fields remain unchanged here) */}
-              {/* Status/Priority/Category/Tags + Save button */}
-              {/* ... keep your current controls exactly ... */}
               <label style={{ display: "block" }}>
                 Status
                 <select
@@ -203,11 +247,82 @@ export default function TicketDetail() {
           <aside style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
             <h4 style={{ marginTop: 0 }}>Activity</h4>
 
+            {/* AI PANEL */}
             <div style={{ marginBottom: 12, padding: 10, border: "1px solid #eee", borderRadius: 8 }}>
-              <div style={{ fontWeight: 600, marginBottom: 6 }}>AI runs summary</div>
-              <div style={{ fontSize: 13, opacity: 0.8 }}>
-                No AI runs yet.
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                <div style={{ fontWeight: 600 }}>AI triage</div>
+                <button
+                  onClick={suggestTriage}
+                  disabled={aiLoading}
+                  style={{
+                    padding: "8px 10px",
+                    cursor: aiLoading ? "not-allowed" : "pointer",
+                  }}
+                >
+                  {aiLoading ? "Thinking..." : "Suggest triage"}
+                </button>
               </div>
+
+              {aiError && (
+                <div style={{ marginTop: 10, padding: 10, border: "1px solid #f0c", borderRadius: 8 }}>
+                  {aiError}
+                </div>
+              )}
+
+              {!aiSuggestion ? (
+                <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>
+                  No suggestions yet.
+                </div>
+              ) : (
+                <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+                  <div style={{ fontSize: 13 }}>
+                    <div><b>Category:</b> {aiSuggestion.category}</div>
+                    <div><b>Priority:</b> {aiSuggestion.priority}</div>
+                    <div><b>Tags:</b> {aiSuggestion.tags?.length ? aiSuggestion.tags.join(", ") : "(none)"}</div>
+                    <div style={{ marginTop: 8, opacity: 0.9 }}>
+                      <b>Rationale:</b> {aiSuggestion.rationale}
+                    </div>
+                    <div style={{ marginTop: 8, fontSize: 12, opacity: 0.7 }}>
+                      aiRunId: {aiSuggestion.aiRunId}
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gap: 8 }}>
+                    <button
+                      onClick={() => applySuggestion("all")}
+                      disabled={aiApplying}
+                      style={{ padding: 10, cursor: aiApplying ? "not-allowed" : "pointer" }}
+                    >
+                      {aiApplying ? "Applying..." : "Apply all"}
+                    </button>
+
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={() => applySuggestion("category")}
+                        disabled={aiApplying}
+                        style={{ flex: 1, padding: 10, cursor: aiApplying ? "not-allowed" : "pointer" }}
+                      >
+                        Apply category
+                      </button>
+                      <button
+                        onClick={() => applySuggestion("priority")}
+                        disabled={aiApplying}
+                        style={{ flex: 1, padding: 10, cursor: aiApplying ? "not-allowed" : "pointer" }}
+                      >
+                        Apply priority
+                      </button>
+                    </div>
+
+                    <button
+                      onClick={() => applySuggestion("tags")}
+                      disabled={aiApplying}
+                      style={{ padding: 10, cursor: aiApplying ? "not-allowed" : "pointer" }}
+                    >
+                      Apply tags
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
             <div style={{ marginBottom: 10, fontWeight: 600 }}>Notes</div>
