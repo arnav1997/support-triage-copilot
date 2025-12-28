@@ -23,6 +23,12 @@ A lightweight support ticket management app built as a fast-paced portfolio proj
 - Inbox **search + filter**
   - `GET /api/tickets?status=&q=`
 
+### Day 3
+- AI triage (local LLM via **Ollama**)
+  - `POST /api/ai/triage`
+  - Returns structured JSON: **category**, **priority**, **tags**, **rationale**, **entities**, **aiRunId**
+  - Persists each run in `ai_runs` (input/output stored as **jsonb**)
+
 ---
 
 ## Tech stack
@@ -46,6 +52,10 @@ A lightweight support ticket management app built as a fast-paced portfolio proj
 - Java 17+ (or whatever your Spring Boot build targets)
 - Node.js 18+ recommended
 - Docker + Docker Compose
+- Ollama installed + model pulled:
+  - `ollama pull llama3.2`
+  - Ollama running locally (default: `http://localhost:11434`)
+
 
 ---
 
@@ -76,6 +86,8 @@ Backend: `http://localhost:8080`
 
 > Flyway migrations run automatically on startup.
 
+> Make sure Ollama is running locally and the model is available (e.g., `llama3.2`) before calling `/api/ai/triage`.
+
 ### 3) Run Frontend (Vite)
 From the frontend folder:
 
@@ -102,6 +114,11 @@ Frontend: `http://localhost:5173`
 ### Notes (Activity feed)
 - `GET /api/tickets/{id}/notes` (newest first)
 - `POST /api/tickets/{id}/notes`
+
+### AI
+- `POST /api/ai/triage`
+  - Body: `{ "ticketId": number }`
+  - Response: `{ category, priority, tags, rationale, entities, aiRunId }`
 
 ---
 
@@ -143,6 +160,30 @@ curl -X POST http://localhost:8080/api/tickets/1/notes \
 ### Search tickets
 ```bash
 curl "http://localhost:8080/api/tickets?status=open&q=auth"
+```
+
+### AI triage a ticket
+```bash
+curl -X POST http://localhost:8080/api/ai/triage \
+  -H "Content-Type: application/json" \
+  -d '{ "ticketId": 1 }'
+```
+
+Example Response:
+```json
+{
+  "category": "bug",
+  "priority": "HIGH",
+  "tags": ["login"],
+  "rationale": "…",
+  "entities": {
+    "requesterEmail": null,
+    "orderId": null,
+    "product": null,
+    "errorCode": null
+  },
+  "aiRunId": 5
+}
 ```
 
 ---
