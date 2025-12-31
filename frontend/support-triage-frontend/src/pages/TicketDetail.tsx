@@ -1,7 +1,34 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api/client";
-import type { Ticket, TicketNote, AiTriageSuggestion } from "../api/client";
+import type {
+  Ticket,
+  TicketNote,
+  AiTriageSuggestion,
+  AiSummaryResponse,
+} from "../api/client";
+
+function formatAiSummaryNoteBody(subject: string | undefined, r: AiSummaryResponse) {
+  const s = (subject ?? "").trim();
+  const title = s ? `AI Summary — ${s}` : "AI Summary";
+
+  const lines: string[] = [];
+  lines.push(title);
+  lines.push("");
+  lines.push((r.summary ?? "").trim());
+
+  const points = (r.keyPoints ?? [])
+    .map((x) => (x ?? "").trim())
+    .filter(Boolean);
+
+  if (points.length) {
+    lines.push("");
+    lines.push("Key points:");
+    for (const p of points) lines.push(`- ${p}`);
+  }
+
+  return lines.join("\n").trim();
+}
 
 export default function TicketDetail() {
   const { id } = useParams();
@@ -27,6 +54,16 @@ export default function TicketDetail() {
   const [aiSuggestion, setAiSuggestion] = useState<AiTriageSuggestion | null>(null);
   const [aiApplying, setAiApplying] = useState(false);
 
+  // --- AI summary state ---
+  const [sumLoading, setSumLoading] = useState(false);
+  const [sumError, setSumError] = useState<string | null>(null);
+  const [sumResult, setSumResult] = useState<AiSummaryResponse | null>(null);
+  const [sumSavingNote, setSumSavingNote] = useState(false);
+
+  const hasSavedNoteFromSummary = useMemo(() => {
+    return !!sumResult?.savedNoteId;
+  }, [sumResult]);
+
   async function load() {
     setError(null);
     try {
@@ -48,6 +85,11 @@ export default function TicketDetail() {
     if (!Number.isFinite(ticketId)) return;
     load();
   }, [ticketId]);
+
+  async function refreshNotes() {
+    const ns = await api.listNotes(ticketId);
+    setNotes(ns);
+  }
 
   async function save() {
     setSaving(true);
@@ -126,6 +168,43 @@ export default function TicketDetail() {
       setError(e?.message ?? "Failed to apply AI suggestion");
     } finally {
       setAiApplying(false);
+    }
+  }
+
+  async function summarize(saveAsNote: boolean) {
+    setSumLoading(true);
+    setSumError(null);
+    try {
+      const r = await api.summarizeTicket(ticketId, saveAsNote);
+      setSumResult(r);
+
+      // If backend saved a note, refresh notes so it shows up.
+      if (r.savedNoteId) {
+        await refreshNotes();
+      }
+    } catch (e: any) {
+      setSumError(e?.message ?? "AI summary failed");
+    } finally {
+      setSumLoading(false);
+    }
+  }
+
+  async function saveSummaryAsNoteFromCurrent() {
+    if (!ticket || !sumResult) return;
+
+    setSumSavingNote(true);
+    setError(null);
+    try {
+      const body = formatAiSummaryNoteBody(ticket.subject, sumResult);
+      const created = await api.createNote(ticketId, { type: "ai_summary", body });
+      setNotes((prev) => [created, ...prev]);
+
+      // mark as saved (without re-running the model)
+      setSumResult((prev) => (prev ? { ...prev, savedNoteId: created.id } : prev));
+    } catch (e: any) {
+      setError(e?.message ?? "Failed to save AI summary as note");
+    } finally {
+      setSumSavingNote(false);
     }
   }
 
@@ -247,7 +326,80 @@ export default function TicketDetail() {
           <aside style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
             <h4 style={{ marginTop: 0 }}>Activity</h4>
 
-            {/* AI PANEL */}
+            {/* AI SUMMARY PANEL */}
+            <div style={{ marginBottom: 12, padding: 10, border: "1px solid #eee", borderRadius: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                <div style={{ fontWeight: 600 }}>AI summary</div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    onClick={() => summarize(false)}
+                    disabled={sumLoading}
+                    style={{ padding: "8px 10px", cursor: sumLoading ? "not-allowed" : "pointer" }}
+                  >
+                    {sumLoading ? "Thinking..." : "Summarize"}
+                  </button>
+                  <button
+                    onClick={() => summarize(true)}
+                    disabled={sumLoading}
+                    style={{ padding: "8px 10px", cursor: sumLoading ? "not-allowed" : "pointer" }}
+                    title="Generates summary and auto-saves as an internal note"
+                  >
+                    {sumLoading ? "Thinking..." : "Summarize + Save"}
+                  </button>
+                </div>
+              </div>
+
+              {sumError && (
+                <div style={{ marginTop: 10, padding: 10, border: "1px solid #f0c", borderRadius: 8 }}>
+                  {sumError}
+                </div>
+              )}
+
+              {!sumResult ? (
+                <div style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>
+                  No summary yet.
+                </div>
+              ) : (
+                <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
+                  <div style={{ fontSize: 13 }}>
+                    <div style={{ fontWeight: 600, marginBottom: 6 }}>Summary</div>
+                    <div style={{ whiteSpace: "pre-wrap" }}>{sumResult.summary}</div>
+
+                    {sumResult.keyPoints?.length > 0 && (
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 6 }}>Key points</div>
+                        <ul style={{ margin: 0, paddingLeft: 18 }}>
+                          {sumResult.keyPoints.map((kp, idx) => (
+                            <li key={idx}>{kp}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    <div style={{ marginTop: 10, fontSize: 12, opacity: 0.75 }}>
+                      {sumResult.savedNoteId ? (
+                        <>Saved as note (id: {sumResult.savedNoteId})</>
+                      ) : (
+                        <>Not saved yet.</>
+                      )}
+                    </div>
+                  </div>
+
+                  {!hasSavedNoteFromSummary && (
+                    <button
+                      onClick={saveSummaryAsNoteFromCurrent}
+                      disabled={sumSavingNote}
+                      style={{ padding: 10, cursor: sumSavingNote ? "not-allowed" : "pointer" }}
+                      title="Saves the currently displayed summary as a note (no extra AI call)"
+                    >
+                      {sumSavingNote ? "Saving..." : "Save this summary as note"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* AI TRIAGE PANEL */}
             <div style={{ marginBottom: 12, padding: 10, border: "1px solid #eee", borderRadius: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                 <div style={{ fontWeight: 600 }}>AI triage</div>

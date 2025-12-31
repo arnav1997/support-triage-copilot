@@ -34,7 +34,7 @@ export type UpdateTicketRequest = Partial<
   Pick<Ticket, "subject" | "body" | "status" | "priority" | "category" | "tags">
 >;
 
-export type TicketNoteType = "note" | "system" | "ai" | string;
+export type TicketNoteType = "note" | "system" | "ai" | "ai_summary" | string;
 
 export type TicketNote = {
   id: number;
@@ -49,7 +49,7 @@ export type CreateNoteRequest = {
   body: string;
 };
 
-// --- AI types ---
+// --- AI triage types ---
 export type AiTriageEntities = {
   requesterEmail: string;
   orderId: string;
@@ -64,6 +64,14 @@ export type AiTriageSuggestion = {
   rationale: string;
   entities: AiTriageEntities;
   aiRunId: number;
+};
+
+// --- AI summary types ---
+export type AiSummaryResponse = {
+  ticketId: number;
+  summary: string;
+  keyPoints: string[];
+  savedNoteId: number | null;
 };
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
@@ -90,14 +98,18 @@ export const api = {
     const qs = usp.toString();
     return http<Ticket[]>(qs ? `/api/tickets?${qs}` : "/api/tickets");
   },
+
   getTicket: (id: number) => http<Ticket>(`/api/tickets/${id}`),
+
   createTicket: (req: CreateTicketRequest) =>
     http<Ticket>("/api/tickets", { method: "POST", body: JSON.stringify(req) }),
+
   patchTicket: (id: number, req: UpdateTicketRequest) =>
     http<Ticket>(`/api/tickets/${id}`, {
       method: "PATCH",
       body: JSON.stringify(req),
     }),
+
   listNotes: (ticketId: number) =>
     http<TicketNote[]>(`/api/tickets/${ticketId}/notes`),
 
@@ -111,5 +123,11 @@ export const api = {
     http<AiTriageSuggestion>("/api/ai/triage", {
       method: "POST",
       body: JSON.stringify({ ticketId }),
+    }),
+
+  summarizeTicket: (ticketId: number, saveAsNote?: boolean) =>
+    http<AiSummaryResponse>("/api/ai/summary", {
+      method: "POST",
+      body: JSON.stringify({ ticketId, saveAsNote: !!saveAsNote }),
     }),
 };
