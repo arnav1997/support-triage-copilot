@@ -29,6 +29,22 @@ A lightweight support ticket management app built as a fast-paced portfolio proj
   - Returns structured JSON: **category**, **priority**, **tags**, **rationale**, **entities**, **aiRunId**
   - Persists each run in `ai_runs` (input/output stored as **jsonb**)
 
+### Day 4
+- AI summary (local LLM via **Ollama**)
+  - `POST /api/ai/summary`
+  - Returns: **summary** + **keyPoints**
+  - Optional: save summary as an internal note (`saveAsNote=true`)
+  - Persists each run in `ai_runs` (jsonb input/output + latency + status)
+
+### Day 5
+- AI reply draft + tone controls (local LLM via **Ollama**)
+  - `POST /api/ai/reply-draft`
+  - Tone enum: **EMPATHETIC / PROFESSIONAL / CONCISE**
+  - Returns: **draft** + **aiRunId**
+  - Frontend: reply draft textarea + **Copy** button + tone dropdown
+  - Persists each run in `ai_runs` (jsonb input/output + latency + status)
+  - Drafts a customer-facing reply message (safe-by-design prompt rules)
+
 ---
 
 ## Tech stack
@@ -86,7 +102,7 @@ Backend: `http://localhost:8080`
 
 > Flyway migrations run automatically on startup.
 
-> Make sure Ollama is running locally and the model is available (e.g., `llama3.2`) before calling `/api/ai/triage`.
+> Make sure Ollama is running locally and the model is available (e.g., `llama3.2`) before calling AI endpoints (`/api/ai/triage`, `/api/ai/summary`, `/api/ai/reply-draft`).
 
 ### 3) Run Frontend (Vite)
 From the frontend folder:
@@ -119,6 +135,14 @@ Frontend: `http://localhost:5173`
 - `POST /api/ai/triage`
   - Body: `{ "ticketId": number }`
   - Response: `{ category, priority, tags, rationale, entities, aiRunId }`
+
+- `POST /api/ai/summary`
+  - Body: `{ "ticketId": number, "saveAsNote"?: boolean }`
+  - Response: `{ ticketId, summary, keyPoints, savedNoteId }`
+
+- `POST /api/ai/reply-draft`
+  - Body: `{ "ticketId": number, "tone": "EMPATHETIC" | "PROFESSIONAL" | "CONCISE" }`
+  - Response: `{ ticketId, tone, draft, aiRunId }`
 
 ---
 
@@ -177,13 +201,34 @@ Example Response:
   "tags": ["login"],
   "rationale": "…",
   "entities": {
-    "requesterEmail": null,
-    "orderId": null,
-    "product": null,
-    "errorCode": null
+    "requesterEmail": "",
+    "orderId": "",
+    "product": "",
+    "errorCode": ""
   },
   "aiRunId": 5
 }
+```
+
+### AI summarize a ticket
+```bash
+curl -X POST http://localhost:8080/api/ai/summary \
+  -H "Content-Type: application/json" \
+  -d '{ "ticketId": 1, "saveAsNote": false }'
+```
+
+### AI summarize + save as note
+```bash
+curl -X POST http://localhost:8080/api/ai/summary \
+  -H "Content-Type: application/json" \
+  -d '{ "ticketId": 1, "saveAsNote": true }'
+```
+
+### AI reply draft (with tone)
+```bash
+curl -X POST http://localhost:8080/api/ai/reply-draft \
+  -H "Content-Type: application/json" \
+  -d '{ "ticketId": 1, "tone": "EMPATHETIC" }'
 ```
 
 ---
