@@ -6,6 +6,8 @@ import type {
   TicketNote,
   AiTriageSuggestion,
   AiSummaryResponse,
+  ReplyTone,
+  AiReplyDraftResponse,
 } from "../api/client";
 
 function formatAiSummaryNoteBody(subject: string | undefined, r: AiSummaryResponse) {
@@ -60,6 +62,14 @@ export default function TicketDetail() {
   const [sumResult, setSumResult] = useState<AiSummaryResponse | null>(null);
   const [sumSavingNote, setSumSavingNote] = useState(false);
 
+    // --- AI reply draft state ---
+  const [replyTone, setReplyTone] = useState<ReplyTone>("EMPATHETIC");
+  const [replyLoading, setReplyLoading] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const [replyResult, setReplyResult] = useState<AiReplyDraftResponse | null>(null);
+  const [replyText, setReplyText] = useState("");
+  const [copied, setCopied] = useState(false);
+
   const hasSavedNoteFromSummary = useMemo(() => {
     return !!sumResult?.savedNoteId;
   }, [sumResult]);
@@ -69,6 +79,12 @@ export default function TicketDetail() {
     try {
       const t = await api.getTicket(ticketId);
       setTicket(t);
+
+      setReplyResult(null);
+      setReplyText("");
+      setReplyError(null);
+      setCopied(false);
+      
       setStatus(t.status);
       setPriority(t.priority);
       setCategory(t.category ?? "");
@@ -208,6 +224,50 @@ export default function TicketDetail() {
     }
   }
 
+  async function generateReplyDraft() {
+    setReplyLoading(true);
+    setReplyError(null);
+    setCopied(false);
+
+    try {
+      const r = await api.replyDraft(ticketId, replyTone);
+      setReplyResult(r);
+      setReplyText(r.draft ?? "");
+    } catch (e: any) {
+      setReplyError(e?.message ?? "AI reply draft failed");
+    } finally {
+      setReplyLoading(false);
+    }
+  }
+
+  async function copyReplyDraft() {
+    const text = (replyText ?? "").trim();
+    if (!text) return;
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // fallback for older browsers / insecure contexts
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        document.execCommand("copy");
+        document.body.removeChild(ta);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1200);
+      } catch (err) {
+        setReplyError("Copy failed (browser blocked clipboard access).");
+      }
+    }
+  }
+
   if (!Number.isFinite(ticketId)) return <p>Invalid ticket id.</p>;
 
   return (
@@ -323,10 +383,10 @@ export default function TicketDetail() {
           </div>
 
           {/* RIGHT: ACTIVITY */}
-          <aside style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
+            <aside style={{ border: "1px solid #ddd", padding: 12, borderRadius: 8 }}>
             <h4 style={{ marginTop: 0 }}>Activity</h4>
 
-            {/* AI SUMMARY PANEL */}
+          {/* AI SUMMARY PANEL */}
             <div style={{ marginBottom: 12, padding: 10, border: "1px solid #eee", borderRadius: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                 <div style={{ fontWeight: 600 }}>AI summary</div>
@@ -399,7 +459,82 @@ export default function TicketDetail() {
               )}
             </div>
 
-            {/* AI TRIAGE PANEL */}
+          {/* AI REPLY DRAFT PANEL */}
+            <div
+              style={{
+                marginBottom: 12,
+                padding: 10,
+                border: "1px solid #eee",
+                borderRadius: 8,
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: 8 }}>Reply draft</div>
+
+              <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <label style={{ display: "flex", gap: 8, alignItems: "center", flex: 1 }}>
+                  Tone
+                  <select
+                    value={replyTone}
+                    onChange={(e) => setReplyTone(e.target.value as ReplyTone)}
+                    style={{ flex: 1, padding: 8 }}
+                  >
+                    <option value="EMPATHETIC">EMPATHETIC</option>
+                    <option value="PROFESSIONAL">PROFESSIONAL</option>
+                    <option value="CONCISE">CONCISE</option>
+                  </select>
+                </label>
+
+                <button
+                  onClick={generateReplyDraft}
+                  disabled={replyLoading}
+                  style={{
+                    padding: "8px 10px",
+                    cursor: replyLoading ? "not-allowed" : "pointer",
+                    whiteSpace: "nowrap",
+                  }}
+                >
+                  {replyLoading ? "Thinking..." : "Generate"}
+                </button>
+              </div>
+
+              {replyError && (
+                <div style={{ marginTop: 10, padding: 10, border: "1px solid #f0c", borderRadius: 8 }}>
+                  {replyError}
+                </div>
+              )}
+
+              <textarea
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                placeholder="Generate a draft reply..."
+                style={{
+                  width: "100%",
+                  padding: 8,
+                  height: 140,
+                  marginTop: 10,
+                  resize: "vertical",
+                }}
+              />
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                <button
+                  onClick={copyReplyDraft}
+                  disabled={!replyText.trim()}
+                  style={{
+                    padding: "8px 10px",
+                    cursor: replyText.trim() ? "pointer" : "not-allowed",
+                  }}
+                >
+                  {copied ? "Copied!" : "Copy"}
+                </button>
+
+                <div style={{ fontSize: 12, opacity: 0.7 }}>
+                  {replyResult?.aiRunId ? <>aiRunId: {replyResult.aiRunId}</> : null}
+                </div>
+              </div>
+            </div>
+
+          {/* AI TRIAGE PANEL */}
             <div style={{ marginBottom: 12, padding: 10, border: "1px solid #eee", borderRadius: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
                 <div style={{ fontWeight: 600 }}>AI triage</div>

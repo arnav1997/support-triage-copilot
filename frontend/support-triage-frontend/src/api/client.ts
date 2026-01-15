@@ -74,6 +74,16 @@ export type AiSummaryResponse = {
   savedNoteId: number | null;
 };
 
+// --- AI reply draft types ---
+export type ReplyTone = "EMPATHETIC" | "PROFESSIONAL" | "CONCISE";
+
+export type AiReplyDraftResponse = {
+  ticketId: number;
+  tone: ReplyTone;
+  draft: string;
+  aiRunId: number;
+};
+
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: { "Content-Type": "application/json" },
@@ -129,5 +139,11 @@ export const api = {
     http<AiSummaryResponse>("/api/ai/summary", {
       method: "POST",
       body: JSON.stringify({ ticketId, saveAsNote: !!saveAsNote }),
+    }),
+
+  replyDraft: (ticketId: number, tone: ReplyTone) =>
+    http<AiReplyDraftResponse>("/api/ai/reply-draft", {
+      method: "POST",
+      body: JSON.stringify({ ticketId, tone }),
     }),
 };
